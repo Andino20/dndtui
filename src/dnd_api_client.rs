@@ -16,21 +16,17 @@ type Result<T> = std::result::Result<T, ClientError>;
 
 #[derive(Debug, Deserialize)]
 struct MonsterListResponse {
-    count: usize,
-    monsters: Vec<MonsterResponse>,
+    results: Vec<MonsterResponse>,
 }
 
 #[derive(Debug, Deserialize)]
 struct MonsterResponse {
-    index: String,
     name: String,
-    url: String,
 }
 
 pub fn all_monsters() -> Result<Vec<Monster>> {
-    let monsters_response = get::<MonsterListResponse>(MONSTERS_BASE_URL)?;
+    let monsters_response = get::<MonsterListResponse>(MONSTERS_BASE_URL)?.results;
     Ok(monsters_response
-        .monsters
         .into_iter()
         .map(|response| Monster {
             name: response.name,

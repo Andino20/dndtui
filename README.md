@@ -40,7 +40,7 @@ At the moment the app expects an instance of the D&D 5e API at `http://localhost
 ## Caveats
 
 - **A local API is required.** The address `http://localhost:3000` is hardcoded and cannot be configured.
-- **An unreachable API is not reported.** The app still starts, but with an empty monster list and no error message.
+- **The app does not start without the API.** If the monster list cannot be loaded, the app exits with an error report instead of opening the interface.
 - **Startup can take a few seconds.** The monster list is fetched before the interface appears, with a timeout of 5 seconds.
 - **Only the 2014 rules are used.** The monster list comes from the API's 2014 SRD endpoint.
 - **Selecting a monster does nothing yet.** The search shows names only.

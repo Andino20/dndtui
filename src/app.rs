@@ -1,3 +1,4 @@
+use crate::dnd_api_client::ClientError;
 use crate::{ListDirection, Message, Model, ui};
 use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -10,6 +11,9 @@ use tui_input::backend::crossterm::to_input_request;
 pub enum DnDTuiError {
     #[error("failed to draw to the terminal")]
     TerminalError(#[from] std::io::Error),
+
+    #[error("failed to load data from source")]
+    ClientError(#[from] ClientError),
 }
 
 type Result<T> = std::result::Result<T, DnDTuiError>;
@@ -20,10 +24,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
-        App {
-            model: Model::new().unwrap_or_else(|_| Model::default()),
-        }
+    pub fn new() -> Result<Self> {
+        Ok(App {
+            model: Model::new()?,
+        })
     }
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {

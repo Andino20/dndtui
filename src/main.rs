@@ -1,29 +1,13 @@
-use ratatui::widgets::ListState;
-use serde::Deserialize;
-use tui_input::{Input, InputRequest};
-
 mod app;
-mod dnd_repository;
-mod repository_error;
-mod ui;
 mod dnd_api_client;
 mod monster;
+mod ui;
 
 use crate::app::App;
-use dnd_repository::DnDRepository;
-use repository_error::RepositoryError;
-
-const MONSTERS_URL: &str = "http://localhost:3000/api/2014/monsters";
-
-#[derive(Debug, Deserialize)]
-struct MonsterEntry {
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct MonsterList {
-    results: Vec<MonsterEntry>,
-}
+use crate::dnd_api_client::ClientError;
+use crate::monster::Monster;
+use ratatui::widgets::ListState;
+use tui_input::{Input, InputRequest};
 
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
@@ -33,7 +17,7 @@ struct Model {
     /// The search bar.
     search: Input,
     /// Every monster known to the API, loaded once at startup.
-    all_monsters: Vec<MonsterEntry>,
+    all_monsters: Vec<Monster>,
     /// Indices into `all_monsters` of the monsters matching the current query.
     results: Vec<usize>,
     /// Selection and scroll state of the result list.
@@ -55,11 +39,9 @@ enum ListDirection {
 
 impl Model {
     /// Construct a new instance of [`Model`], loading the monster list from the API.
-    fn new() -> Result<Self, RepositoryError> {
+    fn new() -> Result<Self, ClientError> {
         let mut model = Self {
-            all_monsters: DnDRepository::<MonsterList>::new(MONSTERS_URL)
-                .get()?
-                .results,
+            all_monsters: dnd_api_client::all_monsters()?,
             ..Self::default()
         };
         model.update_results();
@@ -83,7 +65,7 @@ impl Model {
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    let app = App::new();
+    let app = App::new()?;
     ratatui::run(|terminal| app.run(terminal))?;
     Ok(())
 }
