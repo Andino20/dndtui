@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position},
@@ -6,9 +6,10 @@ use ratatui::{
     text::Line,
     widgets::{Block, List, ListState, Paragraph},
 };
-use std::time::Duration;
 use serde::Deserialize;
+use std::time::Duration;
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
 mod dnd_repository;
 mod repository_error;
@@ -49,31 +50,16 @@ pub struct Model {
 
 #[derive(PartialEq, Debug)]
 enum Message {
-    MoveSearchCursor(CursorPosition),
     MoveListSelection(ListDirection),
-    UpdateSearchQuery(QueryUpdate),
+    MoveSearchCursor(Event),
+    UpdateSearchQuery(Event),
     Quit,
-}
-
-#[derive(PartialEq, Debug)]
-enum CursorPosition {
-    Left,
-    Right,
-    Home,
-    End,
 }
 
 #[derive(PartialEq, Debug)]
 enum ListDirection {
     Up,
     Down,
-}
-
-#[derive(PartialEq, Debug)]
-enum QueryUpdate {
-    Insert(char),
-    Delete,
-    Backspace,
 }
 
 impl Model {
@@ -87,40 +73,9 @@ impl Model {
         app
     }
 
-    /// Byte offset into `query` corresponding to the character-based `cursor`.
-    fn cursor_byte_index(&self) -> usize {
-        self.query
-            .char_indices()
-            .nth(self.cursor)
-            .map_or(self.query.len(), |(i, _)| i)
-    }
-
-    fn insert_char(&mut self, c: char) {
-        let index = self.cursor_byte_index();
-        self.query.insert(index, c);
-        self.cursor += 1;
-        self.update_results();
-    }
-
-    fn delete_char_before_cursor(&mut self) {
-        if self.cursor == 0 {
-            return;
-        }
-        self.cursor -= 1;
-        self.delete_char_at_cursor();
-    }
-
-    fn delete_char_at_cursor(&mut self) {
-        let index = self.cursor_byte_index();
-        if index < self.query.len() {
-            self.query.remove(index);
-            self.update_results();
-        }
-    }
-
     /// Recomputes `results` from the current query and resets the selection.
     fn update_results(&mut self) {
-        let query = self.query.to_lowercase();
+        let query = self.search.value().to_lowercase();
         self.results = self
             .all_monsters
             .iter()
@@ -147,7 +102,7 @@ fn main() -> color_eyre::Result<()> {
         let mut current_msg = handle_key()?;
         while current_msg.is_some() {
             current_msg = update(&mut model, current_msg.unwrap());
-        };
+        }
 
         terminal.draw(|frame| view(&mut model, frame))?;
     }
@@ -158,50 +113,44 @@ fn main() -> color_eyre::Result<()> {
 
 /// Reads the crossterm events and passes back a corresponding message.
 fn handle_key() -> color_eyre::Result<Option<Message>> {
-    if event::poll(Duration::from_millis(250))?
-        && let Event::Key(key) = event::read()?
-        && key.kind == KeyEventKind::Press
-    {
-        return Ok(match (key.modifiers, key.code) {
-            (_, KeyCode::Esc)
-            | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => {
-                Some(Message::Quit)
-            }
-            (_, KeyCode::Down) => Some(Message::MoveListSelection(ListDirection::Down)),
-            (_, KeyCode::Up) => Some(Message::MoveListSelection(ListDirection::Up)),
-            (_, KeyCode::Left) => Some(Message::MoveSearchCursor(CursorPosition::Left)),
-            (_, KeyCode::Right) => Some(Message::MoveSearchCursor(CursorPosition::Right)),
-            (_, KeyCode::Home) => Some(Message::MoveSearchCursor(CursorPosition::Home)),
-            (_, KeyCode::End) => Some(Message::MoveSearchCursor(CursorPosition::End)),
-            (_, KeyCode::Backspace) => Some(Message::UpdateSearchQuery(QueryUpdate::Backspace)),
-            (_, KeyCode::Delete) => Some(Message::UpdateSearchQuery(QueryUpdate::Delete)),
-            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
-                Some(Message::UpdateSearchQuery(QueryUpdate::Insert(c)))
-            }
-            _ => None,
-        });
+    if event::poll(Duration::from_millis(250))? {
+        let event = event::read()?;
+        if let Event::Key(key) = event
+            && key.kind == KeyEventKind::Press
+        {
+            return Ok(match (key.modifiers, key.code) {
+                (_, KeyCode::Esc)
+                | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => {
+                    Some(Message::Quit)
+                }
+                (_, KeyCode::Down) => Some(Message::MoveListSelection(ListDirection::Down)),
+                (_, KeyCode::Up) => Some(Message::MoveListSelection(ListDirection::Up)),
+                (_, KeyCode::Left | KeyCode::Right | KeyCode::Home | KeyCode::End) => {
+                    Some(Message::MoveSearchCursor(event))
+                }
+                (
+                    KeyModifiers::NONE | KeyModifiers::SHIFT,
+                    KeyCode::Char(_) | KeyCode::Backspace | KeyCode::Delete,
+                ) => Some(Message::UpdateSearchQuery(event)),
+                _ => None,
+            });
+        }
     }
     Ok(None)
 }
 
 fn update(model: &mut Model, msg: Message) -> Option<Message> {
     match msg {
-        Message::MoveSearchCursor(position) => match position {
-            CursorPosition::Left => model.cursor = model.cursor.saturating_sub(1),
-            CursorPosition::Right => {
-                model.cursor = (model.cursor + 1).min(model.query.chars().count())
-            }
-            CursorPosition::Home => model.cursor = 0,
-            CursorPosition::End => model.cursor = model.query.chars().count(),
-        },
+        Message::MoveSearchCursor(event) => {
+            model.search.handle_event(&event);
+        }
+        Message::UpdateSearchQuery(event) => {
+            model.search.handle_event(&event);
+            model.update_results();
+        }
         Message::MoveListSelection(direction) => match direction {
             ListDirection::Up => model.list_state.select_previous(),
             ListDirection::Down => model.list_state.select_next(),
-        },
-        Message::UpdateSearchQuery(update) => match update {
-            QueryUpdate::Insert(c) => model.insert_char(c),
-            QueryUpdate::Delete => model.delete_char_at_cursor(),
-            QueryUpdate::Backspace => model.delete_char_before_cursor(),
         },
         Message::Quit => model.running = false,
     }
@@ -210,6 +159,9 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
 
 /// Renders the user interface.
 fn view(model: &mut Model, frame: &mut Frame) {
+    let width = frame.area().width.max(3) - 3;
+    let scroll = model.search.visual_scroll(width as usize);
+
     let [search_area, results_area, help_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Fill(1),
@@ -218,15 +170,11 @@ fn view(model: &mut Model, frame: &mut Frame) {
     .areas(frame.area());
 
     let title = Line::from("Monster Search").bold().blue().left_aligned();
-    let search = Paragraph::new(model.query.as_str()).block(Block::bordered().title(title));
+    let search = Paragraph::new(model.search.value()).block(Block::bordered().title(title));
     frame.render_widget(search, search_area);
 
-    // Place the terminal cursor inside the search bar (offset by the border).
-    let cursor_offset = Line::from(&model.query[..model.cursor_byte_index()]).width() as u16;
-    frame.set_cursor_position(Position::new(
-        search_area.x + 1 + cursor_offset,
-        search_area.y + 1,
-    ));
+    let x = model.search.visual_cursor().max(scroll) - scroll + 1;
+    frame.set_cursor_position((search_area.x + x as u16, search_area.y + 1));
 
     let results_title = format!("Results ({})", model.results.len());
     let results = List::new(model.results.iter().cloned())
