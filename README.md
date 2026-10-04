@@ -2,7 +2,21 @@
 
 A terminal application for Dungeon Masters: look up monsters and run combat encounters without leaving the terminal.
 
-The project is at a very early stage. So far only a basic monster name search exists; everything else described here is the plan, not the current state.
+The project is at a very early stage. So far only a monster name search exists; everything else described under [Idea](#idea) is the plan, not the current state.
+
+## Current state
+
+- The list of monster names is loaded from the API once at startup.
+- Typing filters the list by case-insensitive substring match.
+- The result list can be navigated with the arrow keys.
+
+| Key | Action |
+|---|---|
+| any text | edit the search query |
+| `↑` / `↓` | move the selection in the result list |
+| `Esc` or `Ctrl-C` | quit |
+
+Stat blocks and encounter management are not implemented yet.
 
 ## Idea
 
@@ -23,10 +37,20 @@ cargo run
 
 At the moment the app expects an instance of the D&D 5e API at `http://localhost:3000`. The API's [repository][5e-srd-api] describes how to run one locally.
 
+## Caveats
+
+- **A local API is required.** The address `http://localhost:3000` is hardcoded and cannot be configured.
+- **An unreachable API is not reported.** The app still starts, but with an empty monster list and no error message.
+- **Startup can take a few seconds.** The monster list is fetched before the interface appears, with a timeout of 5 seconds.
+- **Only the 2014 rules are used.** The monster list comes from the API's 2014 SRD endpoint.
+- **Selecting a monster does nothing yet.** The search shows names only.
+- **The code is provisional.** Structure and behaviour may change substantially.
+
 ## Built with
 
-- [Ratatui] and [crossterm] for the terminal UI
+- [Ratatui], [crossterm] and [tui-input] for the terminal UI
 - [reqwest] and [serde] for talking to the API
+- [thiserror] and [color-eyre] for error handling
 
 ## License
 
@@ -40,4 +64,7 @@ This project is licensed under the MIT license ([LICENSE] or <http://opensource.
 [crossterm]: https://github.com/crossterm-rs/crossterm
 [reqwest]: https://github.com/seanmonstar/reqwest
 [serde]: https://serde.rs
+[tui-input]: https://github.com/sayanarijit/tui-input
+[thiserror]: https://github.com/dtolnay/thiserror
+[color-eyre]: https://github.com/eyre-rs/eyre/tree/master/color-eyre
 [LICENSE]: ./LICENSE
