@@ -1,10 +1,12 @@
 use crate::dnd_api_client::ClientError;
-use crate::{ListDirection, Message, Model, ui};
+use crate::model::Model;
+use crate::ui;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 use std::time::Duration;
 use thiserror::Error;
+use tui_input::InputRequest;
 use tui_input::backend::crossterm::to_input_request;
 
 #[derive(Error, Debug)]
@@ -17,6 +19,19 @@ pub enum DnDTuiError {
 }
 
 type Result<T> = std::result::Result<T, DnDTuiError>;
+
+#[derive(PartialEq, Debug)]
+enum Message {
+    MoveListSelection(ListDirection),
+    EditSearch(InputRequest),
+    Quit,
+}
+
+#[derive(PartialEq, Debug)]
+enum ListDirection {
+    Up,
+    Down,
+}
 
 #[derive(Debug, Default)]
 pub struct App {

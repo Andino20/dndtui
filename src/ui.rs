@@ -1,4 +1,4 @@
-use crate::Model;
+use crate::model::Model;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::prelude::{Line, Modifier, Style};
@@ -12,7 +12,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         Constraint::Fill(1),
         Constraint::Length(1),
     ])
-    .areas(frame.area());
+        .areas(frame.area());
 
     // Two columns for the border, one to keep the cursor visible at the end of the query.
     let width = search_area.width.saturating_sub(3);
