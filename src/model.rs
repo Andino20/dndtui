@@ -1,5 +1,4 @@
-use crate::dnd_api_client;
-use crate::dnd_api_client::ClientError;
+use crate::dnd_api_client::{ClientError, DndApiClient};
 use crate::monster::{Monster, MonsterEntry};
 use ratatui::widgets::ListState;
 use std::collections::HashMap;
@@ -22,15 +21,19 @@ pub struct Model {
     pub list_state: ListState,
 
     pub detailed_monster_id: Option<String>,
+
+    pub api_client: DndApiClient,
 }
 
 impl Model {
     /// Construct a new instance of [`crate::Model`], loading the monster list from the API.
     pub fn new() -> Result<Self, ClientError> {
+        let api_client = DndApiClient::new("http://localhost:3000/api/2014")?;
         let mut model = Self {
-            all_monsters: dnd_api_client::all_monsters()?,
+            api_client,
             ..Self::default()
         };
+        model.all_monsters = model.api_client.all_monsters()?;
         model.update_results();
         Ok(model)
     }

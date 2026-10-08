@@ -1,4 +1,4 @@
-use crate::dnd_api_client::{ClientError, monster_by_id};
+use crate::dnd_api_client::ClientError;
 use crate::model::Model;
 use crate::ui;
 use crossterm::event;
@@ -100,7 +100,7 @@ impl App {
                 if let Some(selected) = model.list_state.selected() {
                     let selected_monster_entry_id = &model.all_monsters[model.results[selected]].id;
                     if !model.monsters.contains_key(selected_monster_entry_id) {
-                        let monster = monster_by_id(selected_monster_entry_id)?;
+                        let monster = model.api_client.monster_by_id(selected_monster_entry_id)?;
                         model
                             .monsters
                             .insert(selected_monster_entry_id.to_string(), monster);

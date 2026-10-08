@@ -1,12 +1,11 @@
 use crate::monster::{
     AbilityScores, Action, ArmorClass, ArmorClassSource, Monster, MonsterEntry, Speed,
 };
+use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use thiserror::Error;
-
-const MONSTERS_BASE_URL: &str = "http://localhost:3000/api/2014/monsters";
 
 #[derive(Error, Debug)]
 pub enum ClientError {
@@ -153,28 +152,45 @@ impl From<ActionResponse> for Action {
     }
 }
 
-pub fn all_monsters() -> Result<Vec<MonsterEntry>> {
-    let monsters_response = get::<MonsterListResponse>(MONSTERS_BASE_URL)?.results;
-    Ok(monsters_response
-        .into_iter()
-        .map(|response| MonsterEntry {
-            id: response.index,
-            name: response.name,
+#[derive(Debug, Default)]
+pub struct DndApiClient {
+    client: Client,
+    base_url: String,
+}
+
+impl DndApiClient {
+    pub fn new(base_url: &str) -> Result<Self> {
+        Ok(DndApiClient {
+            client: reqwest::blocking::ClientBuilder::new()
+                .timeout(Duration::new(5, 0))
+                .build()?,
+            base_url: base_url.to_string(),
         })
-        .collect())
-}
+    }
 
-pub fn monster_by_id(id: &str) -> Result<Monster> {
-    let url = format!("{}/{}", MONSTERS_BASE_URL, id);
-    let response = get::<MonsterResponse>(&url)?;
-    Ok(response.into())
-}
+    pub fn all_monsters(&self) -> Result<Vec<MonsterEntry>> {
+        let monsters_response = self.get::<MonsterListResponse>("/monsters")?.results;
+        Ok(monsters_response
+            .into_iter()
+            .map(|response| MonsterEntry {
+                id: response.index,
+                name: response.name,
+            })
+            .collect())
+    }
 
-fn get<T: DeserializeOwned>(url: &str) -> Result<T> {
-    let client = reqwest::blocking::ClientBuilder::new()
-        .timeout(Duration::new(5, 0))
-        .build()?;
-    Ok(client.get(url).send()?.json()?)
+    pub fn monster_by_id(&self, id: &str) -> Result<Monster> {
+        let response = self.get::<MonsterResponse>(&format!("/monsters/{}", id))?;
+        Ok(response.into())
+    }
+
+    fn get<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
+        Ok(self
+            .client
+            .get(format!("{}{}", self.base_url, url))
+            .send()?
+            .json()?)
+    }
 }
 
 fn capitalize(s: String) -> String {
