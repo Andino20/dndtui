@@ -13,7 +13,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         Constraint::Fill(1),
         Constraint::Length(1),
     ])
-    .areas(frame.area());
+        .areas(frame.area());
 
     let [list_area, detail_area] =
         Layout::horizontal([Constraint::Fill(1), Constraint::Fill(2)]).areas(content_area);
@@ -55,7 +55,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         render_monster_details(monster, frame, detail_area);
     }
 
-    let help = Line::from("Type to search | ↑/↓ select | Esc or Ctrl-C quit").dim();
+    let help = Line::from("Type to search | ↑/↓ select | Esc or Ctrl-C quit or close a page").dim();
     frame.render_widget(help, help_area);
 }
 
@@ -70,7 +70,7 @@ fn render_monster_details(monster: &Monster, frame: &mut Frame, area: Rect) {
             "{} {}, {}",
             monster.size, monster.monster_type, monster.alignment
         ))
-        .dim(),
+            .dim(),
         Line::default(),
         labeled("AC", format_armor_class(&monster.armor_class)),
         labeled("Initiative", format!("{:+}", monster.initiative())),
@@ -79,6 +79,7 @@ fn render_monster_details(monster: &Monster, frame: &mut Frame, area: Rect) {
             format!("{} ({})", monster.hit_points, monster.hit_points_roll),
         ),
         labeled("Speed", format_speed(&monster.speed)),
+        labeled("CR", monster.challenge_rating.to_string()),
     ];
 
     // One line below the summary and below the table to separate the sections.
@@ -87,7 +88,7 @@ fn render_monster_details(monster: &Monster, frame: &mut Frame, area: Rect) {
         Constraint::Length(3),
         Constraint::Fill(1),
     ])
-    .areas(inner);
+        .areas(inner);
 
     frame.render_widget(Paragraph::new(summary), summary_area);
 
@@ -100,7 +101,7 @@ fn render_monster_details(monster: &Monster, frame: &mut Frame, area: Rect) {
         scores.wisdom,
         scores.charisma,
     ]
-    .map(|score| format!("{} ({:+})", score, AbilityScores::modifier(score)));
+        .map(|score| format!("{} ({:+})", score, AbilityScores::modifier(score)));
     let stats_table = Table::new([Row::new(stats)], [Constraint::Fill(1); 6])
         .header(Row::new(["STR", "DEX", "CON", "INT", "WIS", "CHA"]).bold());
     frame.render_widget(stats_table, stats_area);

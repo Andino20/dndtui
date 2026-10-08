@@ -9,6 +9,7 @@ pub struct Monster {
     pub name: String,
     pub size: String,
     pub monster_type: String,
+    pub challenge_rating: f32,
     pub alignment: String,
     /// Usually one entry; a second one applies under a spell or condition.
     pub armor_class: Vec<ArmorClass>,

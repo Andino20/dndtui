@@ -33,6 +33,7 @@ struct MonsterResponse {
     size: String,
     #[serde(rename = "type")]
     monster_type: String,
+    challenge_rating: f32,
     alignment: String,
     armor_class: Vec<ArmorClassResponse>,
     hit_points: u32,
@@ -88,6 +89,7 @@ impl From<MonsterResponse> for Monster {
             name: value.name,
             size: value.size,
             monster_type: capitalize(value.monster_type),
+            challenge_rating: value.challenge_rating,
             alignment: value.alignment,
             armor_class: value.armor_class.into_iter().map(|a| a.into()).collect(),
             hit_points: value.hit_points,
