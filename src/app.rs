@@ -112,7 +112,13 @@ impl App {
                 }
             }
             Message::OpenMonsterDetails(monster_id) => model.detailed_monster_id = Some(monster_id),
-            Message::Quit => model.running = false,
+            Message::Quit => {
+                if model.detailed_monster_id.is_some() {
+                    model.detailed_monster_id = None;
+                } else {
+                    model.running = false;
+                }
+            }
         }
         Ok(None)
     }
