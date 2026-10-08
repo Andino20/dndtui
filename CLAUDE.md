@@ -4,9 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-dndtui is a Ratatui terminal app for Dungeon Masters. The goal is monster lookup (stat blocks fetched from the D&D 5e API) and combat encounter management (initiative, hit points, turns). See `README.md` for the idea.
+dndtui is a Ratatui terminal app for Dungeon Masters. The goal is monster lookup (stat blocks fetched from the D&D 5e
+API) and combat encounter management (initiative, hit points, turns). See `README.md` for the idea.
 
-The codebase is at a very early stage and the author considers the existing code provisional. Only a monster name search exists. Do not treat current structure as a convention to preserve; ask before large restructurings, but do not copy patterns just because they are there.
+The codebase is at a very early stage and the author considers the existing code provisional. Only a monster name search
+exists. Do not treat current structure as a convention to preserve; ask before large restructurings, but do not copy
+patterns just because they are there.
 
 ## Commands
 
@@ -24,47 +27,71 @@ There are no tests yet.
 
 ## Runtime dependency
 
-`App::new` in `src/app.rs` calls `Model::new`, which fetches the monster list from `http://localhost:3000/api/2014/monsters`. This happens in `main` before `ratatui::run` takes over the terminal. The URL is hardcoded as `MONSTERS_BASE_URL` in `src/dnd_api_client.rs`.
+`App::new` in `src/app.rs` calls `Model::new` (`src/model.rs`), which fetches the monster list from
+`http://localhost:3000/api/2014/monsters`. This happens in `main` before `ratatui::run` takes over the terminal. The URL
+is hardcoded as `MONSTERS_BASE_URL` in `src/dnd_api_client.rs`.
 
-If the request fails, `App::new` returns the error and `main` exits with a color-eyre report before the interface opens. This is deliberate for now, since the app is useless without the monster list; once it can do something without the API, the error should be shown in the interface instead. To run the app, a local instance of the [5e-srd-api](https://github.com/5e-bits/5e-srd-api) must be running.
+If the request fails, `App::new` returns the error and `main` exits with a color-eyre report before the interface opens.
+This is deliberate for now, since the app is useless without the monster list; once it can do something without the API,
+the error should be shown in the interface instead. To run the app, a local instance of
+the [5e-srd-api](https://github.com/5e-bits/5e-srd-api) must be running.
 
-Since the app takes over the terminal, it cannot be meaningfully exercised from a non-interactive shell; verify changes with `cargo build`, `cargo clippy` and tests.
+Since the app takes over the terminal, it cannot be meaningfully exercised from a non-interactive shell; verify changes
+with `cargo build`, `cargo clippy` and tests.
 
 ## Architecture
 
 The app follows The Elm Architecture as used in the Ratatui docs, split over these files:
 
-- `src/main.rs`: `Model` (all application state), `Message`, `ListDirection`, and `main`.
-- `src/app.rs`: `App`, which owns the `Model`, and the error type `DnDTuiError`.
+- `src/main.rs`: module declarations and `main`.
+- `src/model.rs`: `Model` (all application state).
+- `src/app.rs`: `App`, which owns the `Model`, the private `Message` and `ListDirection` enums, and the error type
+  `DnDTuiError`.
 - `src/ui.rs`: `view`, which renders the model into a frame.
 - `src/dnd_api_client.rs`: the API client and its error type `ClientError`, see Data access.
-- `src/monster.rs`: the domain type `Monster`.
+- `src/monster.rs`: the domain type `MonsterEntry`.
 
 The loop in `App::run`:
 
-- `terminal.draw` calls `ui::view`. It takes `&mut Model` only because Ratatui's stateful list widget needs mutable `ListState`.
+- `terminal.draw` calls `ui::view`. It takes `&mut Model` only because Ratatui's stateful list widget needs mutable
+  `ListState`.
 - `App::handle_key` waits up to 250 ms for a crossterm event and turns a key press into a `Message`.
-- `App::update(&mut Model, Message) -> Option<Message>` is the only place state changes in response to input. It may return a follow-up message, which `run` feeds back into `update` until it returns `None`.
+- `App::update(&mut Model, Message) -> Option<Message>` is the only place state changes in response to input. It may
+  return a follow-up message, which `run` feeds back into `update` until it returns `None`.
 
-`handle_key` and `update` are associated functions without `self`. `Model::running` is set to `true` only at the start of `App::run` and cleared by `Message::Quit`.
+`handle_key` and `update` are associated functions without `self`. `Model::running` is set to `true` only at the start
+of `App::run` and cleared by `Message::Quit`.
 
-New behavior should be added as a `Message` variant handled in `update`, not as ad-hoc mutation in `handle_key` or `view`.
+New behavior should be added as a `Message` variant handled in `update`, not as ad-hoc mutation in `handle_key` or
+`view`.
 
 Error handling:
 
-- Modules define typed errors with `thiserror`: `ClientError` (`src/dnd_api_client.rs`) and `DnDTuiError` (`src/app.rs`). Each module has a private `Result<T>` alias for its own error type.
-- A function returns the error type of its own layer. `Model::new` returns `ClientError`; `App::new` converts it into `DnDTuiError::ClientError` through `#[from]`, which keeps the underlying error as the source.
-- `main` returns `color_eyre::Result`, and typed errors convert into the report through `?`. A `Result` with a typed error returned as a tail expression does not convert; it needs `?` followed by `Ok(())`.
-- `DnDTuiError::TerminalError` wraps `std::io::Error`, which is the error type of the crossterm backend behind `DefaultTerminal`. It is produced by `terminal.draw` and also by `event::poll` and `event::read`, although its message only mentions drawing.
-- Naming the source as `<CrosstermBackend<Stdout> as Backend>::Error` in a `#[from]` attribute does not compile (E0119), so use the concrete `std::io::Error`.
+- Modules define typed errors with `thiserror`: `ClientError` (`src/dnd_api_client.rs`) and `DnDTuiError`
+  (`src/app.rs`). Each module has a private `Result<T>` alias for its own error type.
+- A function returns the error type of its own layer. `Model::new` returns `ClientError`; `App::new` converts it into
+  `DnDTuiError::ClientError` through `#[from]`, which keeps the underlying error as the source.
+- `main` returns `color_eyre::Result`, and typed errors convert into the report through `?`. A `Result` with a typed
+  error returned as a tail expression does not convert; it needs `?` followed by `Ok(())`.
+- `DnDTuiError::TerminalError` wraps `std::io::Error`, which is the error type of the crossterm backend behind
+  `DefaultTerminal`. It is produced by `terminal.draw` and also by `event::poll` and `event::read`, although its message
+  only mentions drawing.
+- Naming the source as `<CrosstermBackend<Stdout> as Backend>::Error` in a `#[from]` attribute does not compile (E0119),
+  so use the concrete `std::io::Error`.
 
 Data access:
 
-- `src/dnd_api_client.rs` is the only module that talks to the API. It exposes one public function per query, such as `all_monsters() -> Result<Vec<Monster>, ClientError>`.
-- The JSON bodies are deserialized into private `*Response` structs that mirror the API, then mapped to domain types such as `Monster`. Response structs do not leave the module; the rest of the app only sees domain types.
+- `src/dnd_api_client.rs` is the only module that talks to the API. It exposes one public function per query, such as
+  `all_monsters() -> Result<Vec<Monster>, ClientError>`.
+- The JSON bodies are deserialized into private `*Response` structs that mirror the API, then mapped to domain types
+  such as `MonsterEntry`. Response structs do not leave the module; the rest of the app only sees domain types.
 - The private `get<T: DeserializeOwned>(url)` does the HTTP request and deserialization for all queries.
-- Requests use `reqwest::blocking` with a 5 s timeout. The only request today is the one at startup; a request made from the main loop would freeze the interface for its duration.
+- Requests use `reqwest::blocking` with a 5 s timeout. The only request today is the one at startup; a request made from
+  the main loop would freeze the interface for its duration.
 
-The full monster list is loaded once at startup and the search filters it in memory by case-insensitive substring; the API is not queried per keystroke.
+The full monster list is loaded once at startup and the search filters it in memory by case-insensitive substring; the
+API is not queried per keystroke.
 
-The search bar is a `tui_input::Input`. Key events that are not app shortcuts are converted with `to_input_request` and applied in `update` via `Message::EditSearch`; the result list is only recomputed when the input reports that its value changed. `Model::results` holds indices into `Model::all_monsters`, not copies of the names.
+The search bar is a `tui_input::Input`. Key events that are not app shortcuts are converted with `to_input_request` and
+applied in `update` via `Message::EditSearch`; the result list is only recomputed when the input reports that its value
+changed. `Model::results` holds indices into `Model::all_monsters`, not copies of the names.

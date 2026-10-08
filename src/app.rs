@@ -1,4 +1,4 @@
-use crate::dnd_api_client::ClientError;
+use crate::dnd_api_client::{ClientError, monster_by_id};
 use crate::model::Model;
 use crate::ui;
 use crossterm::event;
@@ -25,6 +25,8 @@ enum Message {
     MoveListSelection(ListDirection),
     EditSearch(InputRequest),
     Quit,
+    EnterMonsterEntry,
+    OpenMonsterDetails(String),
 }
 
 #[derive(PartialEq, Debug)]
@@ -52,7 +54,7 @@ impl App {
 
             let mut next = Self::handle_key()?;
             while let Some(msg) = next {
-                next = Self::update(&mut self.model, msg);
+                next = Self::update(&mut self.model, msg)?;
             }
         }
         Ok(())
@@ -75,11 +77,12 @@ impl App {
             }
             (_, KeyCode::Down) => Some(Message::MoveListSelection(ListDirection::Down)),
             (_, KeyCode::Up) => Some(Message::MoveListSelection(ListDirection::Up)),
+            (_, KeyCode::Enter) => Some(Message::EnterMonsterEntry),
             _ => to_input_request(&event).map(Message::EditSearch),
         })
     }
 
-    fn update(model: &mut Model, msg: Message) -> Option<Message> {
+    fn update(model: &mut Model, msg: Message) -> Result<Option<Message>> {
         match msg {
             Message::EditSearch(request) => {
                 let query_changed = model
@@ -92,8 +95,25 @@ impl App {
             }
             Message::MoveListSelection(ListDirection::Up) => model.list_state.select_previous(),
             Message::MoveListSelection(ListDirection::Down) => model.list_state.select_next(),
+            Message::EnterMonsterEntry => {
+                // can probably split this update up a bit (check cache -> request monster -> open details)
+                if let Some(selected) = model.list_state.selected() {
+                    let selected_monster_entry_id = &model.all_monsters[model.results[selected]].id;
+                    if !model.monsters.contains_key(selected_monster_entry_id) {
+                        let monster = monster_by_id(selected_monster_entry_id)?;
+                        model
+                            .monsters
+                            .insert(selected_monster_entry_id.to_string(), monster);
+                    }
+
+                    return Ok(Some(Message::OpenMonsterDetails(
+                        selected_monster_entry_id.to_string(),
+                    )));
+                }
+            }
+            Message::OpenMonsterDetails(monster_id) => model.detailed_monster_id = Some(monster_id),
             Message::Quit => model.running = false,
         }
-        None
+        Ok(None)
     }
 }

@@ -1,7 +1,8 @@
 use crate::dnd_api_client;
 use crate::dnd_api_client::ClientError;
-use crate::monster::Monster;
+use crate::monster::{Monster, MonsterEntry};
 use ratatui::widgets::ListState;
+use std::collections::HashMap;
 use tui_input::Input;
 
 /// The main application which holds the state and logic of the application.
@@ -12,11 +13,15 @@ pub struct Model {
     /// The search bar.
     pub search: Input,
     /// Every monster known to the API, loaded once at startup.
-    pub all_monsters: Vec<Monster>,
+    pub all_monsters: Vec<MonsterEntry>,
+    /// Cached monster details requested from the API during runtime.
+    pub monsters: HashMap<String, Monster>,
     /// Indices into `all_monsters` of the monsters matching the current query.
     pub results: Vec<usize>,
     /// Selection and scroll state of the result list.
     pub list_state: ListState,
+
+    pub detailed_monster_id: Option<String>,
 }
 
 impl Model {
