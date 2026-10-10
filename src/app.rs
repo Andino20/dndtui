@@ -1,6 +1,6 @@
 use crate::app::bestiary::BestiaryMessage;
 use crate::dnd_api_client::ClientError;
-use crate::model::Model;
+use crate::model::{Model, Page};
 use crate::ui;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
@@ -24,6 +24,7 @@ type Result<T> = std::result::Result<T, DnDTuiError>;
 #[derive(PartialEq, Debug)]
 enum Message {
     Quit,
+    NextPage,
     Bestiary(BestiaryMessage),
 }
 
@@ -44,7 +45,7 @@ impl App {
         while self.model.running {
             terminal.draw(|frame| ui::view(&mut self.model, frame))?;
 
-            let mut next = Self::handle_key()?;
+            let mut next = Self::handle_key(&self.model.active_page)?;
             while let Some(msg) = next {
                 next = Self::update(&mut self.model, msg)?;
             }
@@ -52,7 +53,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_key() -> Result<Option<Message>> {
+    fn handle_key(active_page: &Page) -> Result<Option<Message>> {
         if !event::poll(Duration::from_millis(250))? {
             return Ok(None);
         }
@@ -64,7 +65,11 @@ impl App {
         }
         Ok(match (key.modifiers, key.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => Some(Message::Quit),
-            _ => bestiary::handle_key(key).map(Message::Bestiary),
+            (_, KeyCode::Tab) => Some(Message::NextPage),
+            _ => match active_page {
+                Page::Bestiary => bestiary::handle_key(key).map(Message::Bestiary),
+                Page::Combat => None,
+            },
         })
     }
 
@@ -72,6 +77,10 @@ impl App {
         Ok(match msg {
             Message::Quit | Message::Bestiary(BestiaryMessage::Leave) => {
                 model.running = false;
+                None
+            }
+            Message::NextPage => {
+                model.active_page = model.active_page.next_page();
                 None
             }
             Message::Bestiary(BestiaryMessage::RequestMonsterById(id)) => {

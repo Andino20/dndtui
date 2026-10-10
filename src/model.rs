@@ -10,6 +10,8 @@ pub struct Model {
 
     pub api_client: DndApiClient,
 
+    pub active_page: Page,
+
     pub bestiary_model: BestiaryModel,
 
     pub combat_model: CombatModel,
@@ -23,8 +25,24 @@ impl Model {
         Ok(Self {
             running: false,
             api_client,
+            active_page: Page::Bestiary,
             bestiary_model,
             combat_model: CombatModel::default(),
         })
+    }
+}
+
+#[derive(Debug)]
+pub enum Page {
+    Bestiary,
+    Combat,
+}
+
+impl Page {
+    pub fn next_page(&self) -> Page {
+        match self {
+            Page::Bestiary => Page::Combat,
+            Page::Combat => Page::Bestiary,
+        }
     }
 }
