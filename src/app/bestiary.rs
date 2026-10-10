@@ -1,16 +1,12 @@
-use crate::app;
-use crate::app::Result;
-use crate::app::bestiary::BestiaryMessage::{EditSearch, MoveListSelection, RequestMonsterById};
-use crate::dnd_api_client::DndApiClient;
+use crate::dnd_api_client::{ClientError, DndApiClient};
 use crate::monster::{
     AbilityScores, Action, ArmorClass, ArmorClassSource, Monster, MonsterEntry, Speed,
 };
-use BestiaryMessage::EnterMonsterEntry;
-use crossterm::event::{Event, KeyCode, KeyEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::prelude::{Line, Modifier, Span, Style};
-use ratatui::style::Stylize;
+use ratatui::style::{Modifier, Style, Stylize};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, List, ListState, Paragraph, Row, Table, Wrap};
 use std::collections::HashMap;
 use tui_input::backend::crossterm::to_input_request;
@@ -28,7 +24,7 @@ pub struct BestiaryModel {
     pub results: Vec<usize>,
     /// Selection and scroll state of the result list.
     pub list_state: ListState,
-
+    /// The monster whose details are shown next to the result list, if any.
     pub detailed_monster_id: Option<String>,
 }
 
@@ -38,6 +34,7 @@ pub enum BestiaryMessage {
     OpenMonsterDetails(String),
     MoveListSelection(ListDirection),
     EditSearch(InputRequest),
+    /// Handled by the app, which owns the API client, and not by [`update`].
     RequestMonsterById(String),
 }
 
@@ -48,9 +45,11 @@ pub enum ListDirection {
 }
 
 impl BestiaryModel {
-    pub fn new(api_client: &DndApiClient) -> Result<BestiaryModel> {
-        let mut model = Self { ..Self::default() };
-        model.all_monsters = api_client.all_monsters()?;
+    pub fn new(api_client: &DndApiClient) -> Result<Self, ClientError> {
+        let mut model = Self {
+            all_monsters: api_client.all_monsters()?,
+            ..Self::default()
+        };
         model.update_results();
         Ok(model)
     }
@@ -69,31 +68,22 @@ impl BestiaryModel {
     }
 }
 
-pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Result<Option<BestiaryMessage>> {
+pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Option<BestiaryMessage> {
     match msg {
-        EnterMonsterEntry => {
-            // can probably split this update up a bit (check cache -> request monster -> open details)
-            if let Some(selected) = model.list_state.selected() {
-                let selected_monster_entry_id = &model.all_monsters[model.results[selected]].id;
-                if !model.monsters.contains_key(selected_monster_entry_id) {
-                    return Ok(Some(RequestMonsterById(
-                        selected_monster_entry_id.to_string(),
-                    )));
-                }
-
-                return Ok(Some(BestiaryMessage::OpenMonsterDetails(
-                    selected_monster_entry_id.to_string(),
-                )));
-            }
+        BestiaryMessage::EnterMonsterEntry => {
+            let selected = model.list_state.selected()?;
+            let &index = model.results.get(selected)?;
+            let id = model.all_monsters[index].id.clone();
+            return Some(if model.monsters.contains_key(&id) {
+                BestiaryMessage::OpenMonsterDetails(id)
+            } else {
+                BestiaryMessage::RequestMonsterById(id)
+            });
         }
-        BestiaryMessage::OpenMonsterDetails(monster_id) => {
-            model.detailed_monster_id = Some(monster_id)
-        }
-        MoveListSelection(direction) => match direction {
-            ListDirection::Up => model.list_state.select_previous(),
-            ListDirection::Down => model.list_state.select_next(),
-        },
-        EditSearch(request) => {
+        BestiaryMessage::OpenMonsterDetails(id) => model.detailed_monster_id = Some(id),
+        BestiaryMessage::MoveListSelection(ListDirection::Up) => model.list_state.select_previous(),
+        BestiaryMessage::MoveListSelection(ListDirection::Down) => model.list_state.select_next(),
+        BestiaryMessage::EditSearch(request) => {
             let query_changed = model
                 .search
                 .handle(request)
@@ -102,23 +92,18 @@ pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Result<Option<
                 model.update_results();
             }
         }
-        _ => {}
+        BestiaryMessage::RequestMonsterById(_) => {}
     }
-    Ok(None)
+    None
 }
 
-pub fn handle_key(event: Event) -> app::Result<Option<BestiaryMessage>> {
-    if let Event::Key(key) = event
-        && key.kind == KeyEventKind::Press
-    {
-        return Ok(match (key.modifiers, key.code) {
-            (_, KeyCode::Down) => Some(MoveListSelection(ListDirection::Down)),
-            (_, KeyCode::Up) => Some(MoveListSelection(ListDirection::Up)),
-            (_, KeyCode::Enter) => Some(EnterMonsterEntry),
-            _ => to_input_request(&event).map(|request| EditSearch(request)),
-        });
+pub fn handle_key(key: KeyEvent) -> Option<BestiaryMessage> {
+    match key.code {
+        KeyCode::Down => Some(BestiaryMessage::MoveListSelection(ListDirection::Down)),
+        KeyCode::Up => Some(BestiaryMessage::MoveListSelection(ListDirection::Up)),
+        KeyCode::Enter => Some(BestiaryMessage::EnterMonsterEntry),
+        _ => to_input_request(&Event::Key(key)).map(BestiaryMessage::EditSearch),
     }
-    Ok(None)
 }
 
 pub fn view(model: &mut BestiaryModel, frame: &mut Frame, area: Rect) {
@@ -127,7 +112,7 @@ pub fn view(model: &mut BestiaryModel, frame: &mut Frame, area: Rect) {
         Constraint::Fill(1),
         Constraint::Length(1),
     ])
-        .areas(area);
+    .areas(area);
 
     let [list_area, detail_area] =
         Layout::horizontal([Constraint::Fill(1), Constraint::Fill(2)]).areas(content_area);
@@ -154,18 +139,18 @@ pub fn view(model: &mut BestiaryModel, frame: &mut Frame, area: Rect) {
         .block(Block::bordered().title(results_title))
         .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
         .highlight_symbol("> ");
-    frame.render_stateful_widget(
-        results,
-        if model.detailed_monster_id.is_some() {
-            list_area
-        } else {
-            content_area
-        },
-        &mut model.list_state,
-    );
+    let detailed_monster = model
+        .detailed_monster_id
+        .as_ref()
+        .and_then(|id| model.monsters.get(id));
+    let results_area = if detailed_monster.is_some() {
+        list_area
+    } else {
+        content_area
+    };
+    frame.render_stateful_widget(results, results_area, &mut model.list_state);
 
-    if let Some(monster_id) = &model.detailed_monster_id {
-        let monster = model.monsters.get(monster_id).unwrap();
+    if let Some(monster) = detailed_monster {
         render_monster_details(monster, frame, detail_area);
     }
 
@@ -184,7 +169,7 @@ fn render_monster_details(monster: &Monster, frame: &mut Frame, area: Rect) {
             "{} {}, {}",
             monster.size, monster.monster_type, monster.alignment
         ))
-            .dim(),
+        .dim(),
         Line::default(),
         labeled("AC", format_armor_class(&monster.armor_class)),
         labeled("Initiative", format!("{:+}", monster.initiative())),
@@ -202,7 +187,7 @@ fn render_monster_details(monster: &Monster, frame: &mut Frame, area: Rect) {
         Constraint::Length(3),
         Constraint::Fill(1),
     ])
-        .areas(inner);
+    .areas(inner);
 
     frame.render_widget(Paragraph::new(summary), summary_area);
 
@@ -215,7 +200,7 @@ fn render_monster_details(monster: &Monster, frame: &mut Frame, area: Rect) {
         scores.wisdom,
         scores.charisma,
     ]
-        .map(|score| format!("{} ({:+})", score, AbilityScores::modifier(score)));
+    .map(|score| format!("{} ({:+})", score, AbilityScores::modifier(score)));
     let stats_table = Table::new([Row::new(stats)], [Constraint::Fill(1); 6])
         .header(Row::new(["STR", "DEX", "CON", "INT", "WIS", "CHA"]).bold());
     frame.render_widget(stats_table, stats_area);

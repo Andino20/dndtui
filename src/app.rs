@@ -1,11 +1,8 @@
-use crate::app::Message::Bestiary;
 use crate::app::bestiary::BestiaryMessage;
-use crate::app::bestiary::BestiaryMessage::RequestMonsterById;
 use crate::dnd_api_client::ClientError;
 use crate::model::Model;
 use crate::ui;
-use crossterm::event;
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 use std::time::Duration;
 use thiserror::Error;
@@ -22,7 +19,7 @@ pub enum DnDTuiError {
     ClientError(#[from] ClientError),
 }
 
-pub type Result<T> = std::result::Result<T, DnDTuiError>;
+type Result<T> = std::result::Result<T, DnDTuiError>;
 
 #[derive(PartialEq, Debug)]
 enum Message {
@@ -59,8 +56,7 @@ impl App {
         if !event::poll(Duration::from_millis(250))? {
             return Ok(None);
         }
-        let event = event::read()?;
-        let Event::Key(key) = &event else {
+        let Event::Key(key) = event::read()? else {
             return Ok(None);
         };
         if key.kind != KeyEventKind::Press {
@@ -70,34 +66,28 @@ impl App {
             (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
                 Some(Message::Quit)
             }
-            _ => bestiary::handle_key(event)?.map(|msg| Bestiary(msg)),
+            _ => bestiary::handle_key(key).map(Message::Bestiary),
         })
     }
 
     fn update(model: &mut Model, msg: Message) -> Result<Option<Message>> {
-        match msg {
+        Ok(match msg {
             Message::Quit => {
                 if model.bestiary_model.detailed_monster_id.is_some() {
                     model.bestiary_model.detailed_monster_id = None;
                 } else {
                     model.running = false;
                 }
+                None
             }
-            Bestiary(msg) => return match msg {
-                RequestMonsterById(id) => {
-                    let monster = model.api_client.monster_by_id(&id)?;
-                    model
-                        .bestiary_model
-                        .monsters
-                        .insert(id.to_string(), monster);
-                    Ok(Some(Bestiary(BestiaryMessage::EnterMonsterEntry)))
-                }
-                _ => {
-                    bestiary::update(&mut model.bestiary_model, msg)
-                        .map(|msg_opt| msg_opt.map(Bestiary))
-                }
-            },
-        }
-        Ok(None)
+            Message::Bestiary(BestiaryMessage::RequestMonsterById(id)) => {
+                let monster = model.api_client.monster_by_id(&id)?;
+                model.bestiary_model.monsters.insert(id.clone(), monster);
+                Some(Message::Bestiary(BestiaryMessage::OpenMonsterDetails(id)))
+            }
+            Message::Bestiary(msg) => {
+                bestiary::update(&mut model.bestiary_model, msg).map(Message::Bestiary)
+            }
+        })
     }
 }

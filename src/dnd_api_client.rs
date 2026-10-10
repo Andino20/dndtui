@@ -91,7 +91,7 @@ impl From<MonsterResponse> for Monster {
             monster_type: capitalize(value.monster_type),
             challenge_rating: value.challenge_rating,
             alignment: value.alignment,
-            armor_class: value.armor_class.into_iter().map(|a| a.into()).collect(),
+            armor_class: value.armor_class.into_iter().map(Into::into).collect(),
             hit_points: value.hit_points,
             hit_points_roll: value.hit_points_roll,
             speed: value.speed.into(),
@@ -103,7 +103,7 @@ impl From<MonsterResponse> for Monster {
                 wisdom: value.wisdom,
                 charisma: value.charisma,
             },
-            actions: value.actions.into_iter().map(|a| a.into()).collect(),
+            actions: value.actions.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -167,8 +167,8 @@ impl DndApiClient {
         headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
 
         Ok(DndApiClient {
-            client: reqwest::blocking::ClientBuilder::new()
-                .timeout(Duration::new(5, 0))
+            client: Client::builder()
+                .timeout(Duration::from_secs(5))
                 .default_headers(headers)
                 .build()?,
             base_url: base_url.to_string(),
@@ -187,7 +187,7 @@ impl DndApiClient {
     }
 
     pub fn monster_by_id(&self, id: &str) -> Result<Monster> {
-        let response = self.get::<MonsterResponse>(&format!("/monsters/{}", id))?;
+        let response = self.get::<MonsterResponse>(&format!("/monsters/{id}"))?;
         Ok(response.into())
     }
 
