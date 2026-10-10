@@ -63,21 +63,15 @@ impl App {
             return Ok(None);
         }
         Ok(match (key.modifiers, key.code) {
-            (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
-                Some(Message::Quit)
-            }
+            (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => Some(Message::Quit),
             _ => bestiary::handle_key(key).map(Message::Bestiary),
         })
     }
 
     fn update(model: &mut Model, msg: Message) -> Result<Option<Message>> {
         Ok(match msg {
-            Message::Quit => {
-                if model.bestiary_model.detailed_monster_id.is_some() {
-                    model.bestiary_model.detailed_monster_id = None;
-                } else {
-                    model.running = false;
-                }
+            Message::Quit | Message::Bestiary(BestiaryMessage::Leave) => {
+                model.running = false;
                 None
             }
             Message::Bestiary(BestiaryMessage::RequestMonsterById(id)) => {

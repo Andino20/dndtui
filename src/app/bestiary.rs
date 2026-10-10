@@ -34,8 +34,11 @@ pub enum BestiaryMessage {
     OpenMonsterDetails(String),
     MoveListSelection(ListDirection),
     EditSearch(InputRequest),
+    Back,
     /// Handled by the app, which owns the API client, and not by [`update`].
     RequestMonsterById(String),
+    /// Handled by the app and not by [`update`]: the page has nothing left to close.
+    Leave,
 }
 
 #[derive(PartialEq, Debug)]
@@ -92,7 +95,12 @@ pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Option<Bestiar
                 model.update_results();
             }
         }
-        BestiaryMessage::RequestMonsterById(_) => {}
+        BestiaryMessage::Back => {
+            if model.detailed_monster_id.take().is_none() {
+                return Some(BestiaryMessage::Leave);
+            }
+        }
+        BestiaryMessage::RequestMonsterById(_) | BestiaryMessage::Leave => {}
     }
     None
 }
@@ -102,6 +110,7 @@ pub fn handle_key(key: KeyEvent) -> Option<BestiaryMessage> {
         KeyCode::Down => Some(BestiaryMessage::MoveListSelection(ListDirection::Down)),
         KeyCode::Up => Some(BestiaryMessage::MoveListSelection(ListDirection::Up)),
         KeyCode::Enter => Some(BestiaryMessage::EnterMonsterEntry),
+        KeyCode::Esc => Some(BestiaryMessage::Back),
         _ => to_input_request(&Event::Key(key)).map(BestiaryMessage::EditSearch),
     }
 }
@@ -154,7 +163,8 @@ pub fn view(model: &mut BestiaryModel, frame: &mut Frame, area: Rect) {
         render_monster_details(monster, frame, detail_area);
     }
 
-    let help = Line::from("Type to search | ↑/↓ select | Esc or Ctrl-C quit or close a page").dim();
+    let help =
+        Line::from("Type to search | ↑/↓ select | Enter details | Esc back | Ctrl-C quit").dim();
     frame.render_widget(help, help_area);
 }
 

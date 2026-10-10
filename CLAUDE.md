@@ -61,13 +61,13 @@ The loop in `App::run`:
 - `terminal.draw` calls `ui::view`. It takes `&mut Model` only because Ratatui's stateful list widget needs mutable
   `ListState`.
 - `App::handle_key` waits up to 250 ms for a crossterm event, drops everything but key presses, handles the global
-  shortcuts (Esc, Ctrl-C) and passes any other `KeyEvent` to the page's `handle_key`, wrapping the result in
+  shortcut (Ctrl-C) and passes any other `KeyEvent` to the page's `handle_key`, wrapping the result in
   `Message::Bestiary`.
 - `App::update(&mut Model, Message) -> Result<Option<Message>>` is the only place state changes in response to input.
   It may return a follow-up message, which `run` feeds back into `update` until it returns `None`.
 
 `handle_key` and `update` are associated functions without `self`. `Model::running` is set to `true` only at the start
-of `App::run` and cleared by `Message::Quit`.
+of `App::run` and cleared by `Message::Quit` (Ctrl-C) or `BestiaryMessage::Leave`.
 
 Pages and their parent:
 
@@ -76,7 +76,9 @@ Pages and their parent:
 - A page's `update` cannot fail and has no access to the API client. When it needs something from the parent it returns
   a message that `App::update` intercepts before delegating. Today that is `BestiaryMessage::RequestMonsterById`: `App`
   fetches the monster, stores it in `BestiaryModel::monsters` and follows up with `OpenMonsterDetails`. The page's own
-  `update` has an explicit no-op arm for it.
+  `update` has an explicit no-op arm for it. `BestiaryMessage::Leave` works the same way: Esc maps to
+  `BestiaryMessage::Back`, which closes the details pane or, if nothing is open, returns `Leave`, which `App` currently
+  treats as quit.
 - Matches over message enums are exhaustive without a `_` arm, so a new variant is a compile error until handled.
 - Message variants are written qualified (`Message::Quit`, `BestiaryMessage::EditSearch`), not imported bare.
 
@@ -86,7 +88,6 @@ or needs shared state), not as ad-hoc mutation in `handle_key` or `view`.
 Known gaps in the page structure, not conventions:
 
 - There is no notion of an active page; `ui::view` and `App::handle_key` are hardwired to the bestiary.
-- `Message::Quit` reaches into `bestiary_model.detailed_monster_id` to close the details pane before quitting.
 - The monster cache lives in `BestiaryModel`, although combat will likely need it too.
 
 Error handling:
