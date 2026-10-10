@@ -1,3 +1,4 @@
+use crate::app::bestiary::BestiaryMessage;
 use crate::dnd_api_client::ClientError;
 use crate::model::Model;
 use crate::ui;
@@ -6,8 +7,9 @@ use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 use std::time::Duration;
 use thiserror::Error;
-use tui_input::InputRequest;
-use tui_input::backend::crossterm::to_input_request;
+
+pub mod bestiary;
+pub mod combat;
 
 #[derive(Error, Debug)]
 pub enum DnDTuiError {
@@ -18,21 +20,13 @@ pub enum DnDTuiError {
     ClientError(#[from] ClientError),
 }
 
-type Result<T> = std::result::Result<T, DnDTuiError>;
+pub type Result<T> = std::result::Result<T, DnDTuiError>;
 
 #[derive(PartialEq, Debug)]
 enum Message {
-    MoveListSelection(ListDirection),
-    EditSearch(InputRequest),
     Quit,
-    EnterMonsterEntry,
-    OpenMonsterDetails(String),
-}
-
-#[derive(PartialEq, Debug)]
-enum ListDirection {
-    Up,
-    Down,
+    RequestMonsterById(String),
+    Bestiary(BestiaryMessage),
 }
 
 #[derive(Debug, Default)]
@@ -75,49 +69,29 @@ impl App {
             (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
                 Some(Message::Quit)
             }
-            (_, KeyCode::Down) => Some(Message::MoveListSelection(ListDirection::Down)),
-            (_, KeyCode::Up) => Some(Message::MoveListSelection(ListDirection::Up)),
-            (_, KeyCode::Enter) => Some(Message::EnterMonsterEntry),
-            _ => to_input_request(&event).map(Message::EditSearch),
+            _ => bestiary::handle_key(event)?,
         })
     }
 
     fn update(model: &mut Model, msg: Message) -> Result<Option<Message>> {
         match msg {
-            Message::EditSearch(request) => {
-                let query_changed = model
-                    .search
-                    .handle(request)
-                    .is_some_and(|change| change.value);
-                if query_changed {
-                    model.update_results();
-                }
-            }
-            Message::MoveListSelection(ListDirection::Up) => model.list_state.select_previous(),
-            Message::MoveListSelection(ListDirection::Down) => model.list_state.select_next(),
-            Message::EnterMonsterEntry => {
-                // can probably split this update up a bit (check cache -> request monster -> open details)
-                if let Some(selected) = model.list_state.selected() {
-                    let selected_monster_entry_id = &model.all_monsters[model.results[selected]].id;
-                    if !model.monsters.contains_key(selected_monster_entry_id) {
-                        let monster = model.api_client.monster_by_id(selected_monster_entry_id)?;
-                        model
-                            .monsters
-                            .insert(selected_monster_entry_id.to_string(), monster);
-                    }
-
-                    return Ok(Some(Message::OpenMonsterDetails(
-                        selected_monster_entry_id.to_string(),
-                    )));
-                }
-            }
-            Message::OpenMonsterDetails(monster_id) => model.detailed_monster_id = Some(monster_id),
             Message::Quit => {
-                if model.detailed_monster_id.is_some() {
-                    model.detailed_monster_id = None;
+                if model.bestiary_model.detailed_monster_id.is_some() {
+                    model.bestiary_model.detailed_monster_id = None;
                 } else {
                     model.running = false;
                 }
+            }
+            Message::Bestiary(bestiary_msg) => {
+                return bestiary::update(&mut model.bestiary_model, bestiary_msg);
+            }
+            Message::RequestMonsterById(id) => {
+                let monster = model.api_client.monster_by_id(&id)?;
+                model
+                    .bestiary_model
+                    .monsters
+                    .insert(id.to_string(), monster);
+                return Ok(Some(Message::Bestiary(BestiaryMessage::EnterMonsterEntry)));
             }
         }
         Ok(None)

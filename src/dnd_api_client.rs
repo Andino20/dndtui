@@ -2,6 +2,7 @@ use crate::monster::{
     AbilityScores, Action, ArmorClass, ArmorClassSource, Monster, MonsterEntry, Speed,
 };
 use reqwest::blocking::Client;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
@@ -160,9 +161,15 @@ pub struct DndApiClient {
 
 impl DndApiClient {
     pub fn new(base_url: &str) -> Result<Self> {
+        // The API redirects plain HTTP to HTTPS in production mode unless a proxy vouches for the
+        // request.
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+
         Ok(DndApiClient {
             client: reqwest::blocking::ClientBuilder::new()
                 .timeout(Duration::new(5, 0))
+                .default_headers(headers)
                 .build()?,
             base_url: base_url.to_string(),
         })
