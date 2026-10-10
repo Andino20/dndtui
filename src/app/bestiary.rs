@@ -1,8 +1,6 @@
 use crate::app;
-use crate::app::Message;
-use crate::app::Message::{Bestiary, RequestMonsterById};
 use crate::app::Result;
-use crate::app::bestiary::BestiaryMessage::{EditSearch, MoveListSelection};
+use crate::app::bestiary::BestiaryMessage::{EditSearch, MoveListSelection, RequestMonsterById};
 use crate::dnd_api_client::DndApiClient;
 use crate::monster::{
     AbilityScores, Action, ArmorClass, ArmorClassSource, Monster, MonsterEntry, Speed,
@@ -40,6 +38,7 @@ pub enum BestiaryMessage {
     OpenMonsterDetails(String),
     MoveListSelection(ListDirection),
     EditSearch(InputRequest),
+    RequestMonsterById(String),
 }
 
 #[derive(PartialEq, Debug)]
@@ -70,7 +69,7 @@ impl BestiaryModel {
     }
 }
 
-pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Result<Option<Message>> {
+pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Result<Option<BestiaryMessage>> {
     match msg {
         EnterMonsterEntry => {
             // can probably split this update up a bit (check cache -> request monster -> open details)
@@ -82,9 +81,9 @@ pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Result<Option<
                     )));
                 }
 
-                return Ok(Some(Bestiary(BestiaryMessage::OpenMonsterDetails(
+                return Ok(Some(BestiaryMessage::OpenMonsterDetails(
                     selected_monster_entry_id.to_string(),
-                ))));
+                )));
             }
         }
         BestiaryMessage::OpenMonsterDetails(monster_id) => {
@@ -108,15 +107,15 @@ pub fn update(model: &mut BestiaryModel, msg: BestiaryMessage) -> Result<Option<
     Ok(None)
 }
 
-pub fn handle_key(event: Event) -> app::Result<Option<Message>> {
+pub fn handle_key(event: Event) -> app::Result<Option<BestiaryMessage>> {
     if let Event::Key(key) = event
         && key.kind == KeyEventKind::Press
     {
         return Ok(match (key.modifiers, key.code) {
-            (_, KeyCode::Down) => Some(Bestiary(MoveListSelection(ListDirection::Down))),
-            (_, KeyCode::Up) => Some(Bestiary(MoveListSelection(ListDirection::Up))),
-            (_, KeyCode::Enter) => Some(Bestiary(EnterMonsterEntry)),
-            _ => to_input_request(&event).map(|request| Bestiary(EditSearch(request))),
+            (_, KeyCode::Down) => Some(MoveListSelection(ListDirection::Down)),
+            (_, KeyCode::Up) => Some(MoveListSelection(ListDirection::Up)),
+            (_, KeyCode::Enter) => Some(EnterMonsterEntry),
+            _ => to_input_request(&event).map(|request| EditSearch(request)),
         });
     }
     Ok(None)

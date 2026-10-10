@@ -1,4 +1,6 @@
+use crate::app::Message::Bestiary;
 use crate::app::bestiary::BestiaryMessage;
+use crate::app::bestiary::BestiaryMessage::RequestMonsterById;
 use crate::dnd_api_client::ClientError;
 use crate::model::Model;
 use crate::ui;
@@ -25,7 +27,6 @@ pub type Result<T> = std::result::Result<T, DnDTuiError>;
 #[derive(PartialEq, Debug)]
 enum Message {
     Quit,
-    RequestMonsterById(String),
     Bestiary(BestiaryMessage),
 }
 
@@ -69,7 +70,7 @@ impl App {
             (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
                 Some(Message::Quit)
             }
-            _ => bestiary::handle_key(event)?,
+            _ => bestiary::handle_key(event)?.map(|msg| Bestiary(msg)),
         })
     }
 
@@ -82,17 +83,20 @@ impl App {
                     model.running = false;
                 }
             }
-            Message::Bestiary(bestiary_msg) => {
-                return bestiary::update(&mut model.bestiary_model, bestiary_msg);
-            }
-            Message::RequestMonsterById(id) => {
-                let monster = model.api_client.monster_by_id(&id)?;
-                model
-                    .bestiary_model
-                    .monsters
-                    .insert(id.to_string(), monster);
-                return Ok(Some(Message::Bestiary(BestiaryMessage::EnterMonsterEntry)));
-            }
+            Bestiary(msg) => return match msg {
+                RequestMonsterById(id) => {
+                    let monster = model.api_client.monster_by_id(&id)?;
+                    model
+                        .bestiary_model
+                        .monsters
+                        .insert(id.to_string(), monster);
+                    Ok(Some(Bestiary(BestiaryMessage::EnterMonsterEntry)))
+                }
+                _ => {
+                    bestiary::update(&mut model.bestiary_model, msg)
+                        .map(|msg_opt| msg_opt.map(Bestiary))
+                }
+            },
         }
         Ok(None)
     }
