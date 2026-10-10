@@ -27,7 +27,7 @@ enum Message {
     Bestiary(BestiaryMessage),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct App {
     model: Model,
 }

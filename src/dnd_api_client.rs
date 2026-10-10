@@ -153,7 +153,7 @@ impl From<ActionResponse> for Action {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DndApiClient {
     client: Client,
     base_url: String,

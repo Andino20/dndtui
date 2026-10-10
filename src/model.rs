@@ -3,7 +3,7 @@ use crate::app::combat::CombatModel;
 use crate::dnd_api_client::{ClientError, DndApiClient};
 
 /// The main application which holds the state and logic of the application.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Model {
     /// Is the application running?
     pub running: bool,
@@ -21,9 +21,10 @@ impl Model {
         let api_client = DndApiClient::new("http://localhost:3000/api/2014")?;
         let bestiary_model = BestiaryModel::new(&api_client)?;
         Ok(Self {
+            running: false,
             api_client,
             bestiary_model,
-            ..Self::default()
+            combat_model: CombatModel::default(),
         })
     }
 }
